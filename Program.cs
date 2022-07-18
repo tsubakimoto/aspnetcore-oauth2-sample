@@ -47,7 +47,7 @@ app.MapGet("/", async (HttpContext context) =>
     response.Append("<body>");
     if (string.IsNullOrWhiteSpace(error) && string.IsNullOrWhiteSpace(description))
     {
-        response.Append("<p><a href=\"/login\">Login</a></p>");
+        response.Append("<p><a href=\"/manual/login\">Manual Login</a></p>");
         response.Append($"<p><a href=\"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/logout\">Logout</a></p>");
     }
     else
@@ -62,10 +62,12 @@ app.MapGet("/", async (HttpContext context) =>
     await context.Response.WriteAsync(response.ToString());
 });
 
+#region Manual
+
 // 承認コードの要求
-app.MapGet("/login", async (HttpContext context) =>
+app.MapGet("/manual/login", async (HttpContext context) =>
 {
-    var redirectUri = Uri.EscapeDataString($"{context.Request.Scheme}://{context.Request.Host}/auth-response");
+    var redirectUri = Uri.EscapeDataString($"{context.Request.Scheme}://{context.Request.Host}/manual/auth-response");
     app.Logger.LogInformation("Redirect Uri: {redirectUri}", redirectUri);
 
     var scope = Uri.EscapeDataString("offline_access user.read");
@@ -79,7 +81,7 @@ app.MapGet("/login", async (HttpContext context) =>
 });
 
 // 認証応答エンドポイント
-app.MapGet("/auth-response",
+app.MapGet("/manual/auth-response",
     async (
         HttpContext context,
         string code,
@@ -111,7 +113,7 @@ app.MapGet("/auth-response",
     response.Append($"<dt>State</dt><dd>{state}</dd>");
     response.Append($"<dt>Session state</dt><dd>{sessionState}</dd>");
     response.Append("</dl>");
-    response.Append("<p><a href=\"/token\">Get a token</a></p>");
+    response.Append("<p><a href=\"/manual/token\">Get a token</a></p>");
     response.Append("<p><a href=\"/\">Back to top</a></p>");
     response.Append("</body>");
     response.Append("</html>");
@@ -119,13 +121,13 @@ app.MapGet("/auth-response",
 });
 
 // トークン管理エンドポイント
-app.MapGet("/token",
+app.MapGet("/manual/token",
     async (
         HttpContext context,
         [FromServices] IHttpClientFactory httpClientFactory) =>
 {
     var code = context.Session.GetString("code") ?? string.Empty;
-    var redirectUri = $"{context.Request.Scheme}://{context.Request.Host}/auth-response";
+    var redirectUri = $"{context.Request.Scheme}://{context.Request.Host}/manual/auth-response";
     var scope = Uri.EscapeDataString("user.read");
     var parameters = new Dictionary<string, string>
     {
@@ -162,8 +164,8 @@ app.MapGet("/token",
         response.Append($"<dt>Access token</dt><dd>{token?.access_token ?? "(not found)"}</dd>");
         response.Append($"<dt>Refresh token</dt><dd>{token?.refresh_token ?? "(not found)"}</dd>");
         response.Append("</dl>");
-        response.Append("<p><a href=\"/me\">Show me</a></p>");
-        response.Append("<p><a href=\"/refresh\">Refresh a token</a></p>");
+        response.Append("<p><a href=\"/manual/me\">Show me</a></p>");
+        response.Append("<p><a href=\"/manual/refresh\">Refresh a token</a></p>");
     }
     else
     {
@@ -181,7 +183,7 @@ app.MapGet("/token",
 });
 
 // トークン更新エンドポイント
-app.MapGet("/refresh", async (HttpContext context, [FromServices] IHttpClientFactory httpClientFactory) =>
+app.MapGet("/manual/refresh", async (HttpContext context, [FromServices] IHttpClientFactory httpClientFactory) =>
 {
     var refreshToken = context.Session.GetString(nameof(AzureAdToken.refresh_token)) ?? string.Empty;
     var scope = Uri.EscapeDataString("user.read");
@@ -219,8 +221,8 @@ app.MapGet("/refresh", async (HttpContext context, [FromServices] IHttpClientFac
         response.Append($"<dt>Access token</dt><dd>{token?.access_token ?? "(not found)"}</dd>");
         response.Append($"<dt>Refresh token</dt><dd>{token?.refresh_token ?? "(not found)"}</dd>");
         response.Append("</dl>");
-        response.Append("<p><a href=\"/me\">Show me</a></p>");
-        response.Append("<p><a href=\"/refresh\">Refresh a token</a></p>");
+        response.Append("<p><a href=\"/manual/me\">Show me</a></p>");
+        response.Append("<p><a href=\"/manual/refresh\">Refresh a token</a></p>");
     }
     else
     {
@@ -238,7 +240,7 @@ app.MapGet("/refresh", async (HttpContext context, [FromServices] IHttpClientFac
 });
 
 // プロファイル取得エンドポイント
-app.MapGet("/me", async (HttpContext context, [FromServices] IHttpClientFactory httpClientFactory) =>
+app.MapGet("/manual/me", async (HttpContext context, [FromServices] IHttpClientFactory httpClientFactory) =>
 {
     var accessToken = context.Session.GetString(nameof(AzureAdToken.access_token));
     app.Logger.LogDebug("Access token: {accessToken}", accessToken);
@@ -280,6 +282,8 @@ app.MapGet("/me", async (HttpContext context, [FromServices] IHttpClientFactory 
     response.Append("</html>");
     await context.Response.WriteAsync(response.ToString());
 });
+
+#endregion
 
 // Session
 app.UseSession();
