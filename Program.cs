@@ -1,9 +1,7 @@
-// https://docs.microsoft.com/ja-jp/azure/active-directory/develop/v2-oauth2-auth-code-flow
-// https://docs.microsoft.com/ja-jp/graph/auth-v2-user
-
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Identity.Web;
 using Microsoft.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,7 +25,18 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
+// Auth (MSAL)
+builder.Services.AddMicrosoftIdentityWebAppAuthentication(builder.Configuration, "AzureAd")
+    .EnableTokenAcquisitionToCallDownstreamApi(new string[] { "user.read" })
+        .AddMicrosoftGraph(builder.Configuration.GetSection("Graph"))
+    .AddDistributedTokenCaches();
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
+
+// Auth
+app.UseAuthentication();
+app.UseAuthorization();
 
 var tenantId = app.Configuration["AzureAD:TenantId"].ToString();
 var clientId = app.Configuration["AzureAD:ClientId"].ToString();
@@ -48,6 +57,7 @@ app.MapGet("/", async (HttpContext context) =>
     if (string.IsNullOrWhiteSpace(error) && string.IsNullOrWhiteSpace(description))
     {
         response.Append("<p><a href=\"/manual/login\">Manual Login</a></p>");
+        response.Append("<p><a href=\"/msal/login\">MSAL Login</a></p>");
         response.Append($"<p><a href=\"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/logout\">Logout</a></p>");
     }
     else
@@ -63,6 +73,9 @@ app.MapGet("/", async (HttpContext context) =>
 });
 
 #region Manual
+
+// https://docs.microsoft.com/ja-jp/azure/active-directory/develop/v2-oauth2-auth-code-flow
+// https://docs.microsoft.com/ja-jp/graph/auth-v2-user
 
 // 承認コードの要求
 app.MapGet("/manual/login", async (HttpContext context) =>
@@ -282,6 +295,91 @@ app.MapGet("/manual/me", async (HttpContext context, [FromServices] IHttpClientF
     response.Append("</html>");
     await context.Response.WriteAsync(response.ToString());
 });
+
+#endregion
+
+#region MSAL
+
+// https://docs.microsoft.com/ja-jp/azure/active-directory/develop/scenario-web-app-call-api-overview
+// https://docs.microsoft.com/ja-jp/aspnet/core/fundamentals/minimal-apis?view=aspnetcore-6.0
+// https://dev.to/kasuken/securing-a-blazor-webassembly-hosted-apps-with-azure-active-directory-part-2-1ppd
+
+// ログイン後エンドポイント
+app.MapGet("/msal/login", async (HttpContext context) =>
+{
+    var response = new StringBuilder();
+    response.Append("<html lang=\"ja\">");
+    response.Append("<head>");
+    response.Append("<meta charset=\"UTF-8\">");
+    response.Append("</head>");
+    response.Append("<body>");
+    response.Append("<p>Logged in.</p>");
+    response.Append("<p><a href=\"/msal/token\">Get a token</a></p>");
+    response.Append("<p><a href=\"/\">Back to top</a></p>");
+    response.Append("</p>");
+    response.Append("</html>");
+    await context.Response.WriteAsync(response.ToString());
+}).RequireAuthorization();
+
+// トークン管理エンドポイント
+app.MapGet("/msal/token", async (
+    HttpContext context,
+    [FromServices] ITokenAcquisition tokenAcquisition) =>
+{
+    // Acquire the access token.
+    var scopes = new string[] { "user.read" };
+    var accessToken = await tokenAcquisition.GetAccessTokenForUserAsync(scopes);
+    app.Logger.LogDebug("Access token: {accessToken}", accessToken);
+
+    var response = new StringBuilder();
+    response.Append("<html lang=\"ja\">");
+    response.Append("<head>");
+    response.Append("<meta charset=\"UTF-8\">");
+    response.Append("</head>");
+    response.Append("<body>");
+    response.Append("<dl>");
+    response.Append($"<dt>Access token</dt><dd>{accessToken ?? "(not found)"}</dd>");
+    response.Append("</dl>");
+    response.Append("<p><a href=\"/msal/me\">Show me</a></p>");
+    response.Append("<p><a href=\"/\">Back to top</a></p>");
+    response.Append("</body>");
+    response.Append("</html>");
+    await context.Response.WriteAsync(response.ToString());
+}).RequireAuthorization();
+
+// プロファイル取得エンドポイント
+app.MapGet("/msal/me", async (
+    HttpContext context,
+    [FromServices] Microsoft.Graph.GraphServiceClient graphServiceClient) =>
+{
+    var user = await graphServiceClient.Me.Request().GetAsync();
+
+    var response = new StringBuilder();
+    response.Append("<html lang=\"ja\">");
+    response.Append("<head>");
+    response.Append("<meta charset=\"UTF-8\">");
+    response.Append("</head>");
+    response.Append("<body>");
+    if (user is null)
+    {
+        response.Append("<p>Who am I?</p>");
+    }
+    else
+    {
+        response.Append("<dl>");
+        response.Append($"<dt>ID</dt><dd>{user?.Id ?? "(not found)"}</dd>");
+        response.Append($"<dt>Display name</dt><dd>{user?.DisplayName ?? "(not found)"}</dd>");
+        response.Append($"<dt>Mail</dt><dd>{user?.Mail ?? "(not found)"}</dd>");
+        response.Append($"<dt>User principal name</dt><dd>{user?.UserPrincipalName ?? "(not found)"}</dd>");
+        response.Append($"<dt>Given name</dt><dd>{user?.GivenName ?? "(not found)"}</dd>");
+        response.Append($"<dt>Surname</dt><dd>{user?.Surname ?? "(not found)"}</dd>");
+        response.Append("</dl>");
+    }
+    response.Append("<p><a href=\"/\">Back to top</a></p>");
+    response.Append("</body>");
+    response.Append("</html>");
+    await context.Response.WriteAsync(response.ToString());
+}).RequireAuthorization();
 
 #endregion
 

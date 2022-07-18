@@ -8,4 +8,10 @@
     <UserSecretsId>da3c678b-0c13-4d5c-9984-d29d6fec0e06</UserSecretsId>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.45.0" />
+    <PackageReference Include="Microsoft.Identity.Web" Version="1.25.1" />
+    <PackageReference Include="Microsoft.Identity.Web.MicrosoftGraph" Version="1.25.1" />
+  </ItemGroup>
+
 </Project>
