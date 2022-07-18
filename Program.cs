@@ -163,6 +163,64 @@ app.MapGet("/token",
         response.Append($"<dt>Refresh token</dt><dd>{token?.refresh_token ?? "(not found)"}</dd>");
         response.Append("</dl>");
         response.Append("<p><a href=\"/me\">Show me</a></p>");
+        response.Append("<p><a href=\"/refresh\">Refresh a token</a></p>");
+    }
+    else
+    {
+        var error = await httpResponseMessage.Content.ReadAsStringAsync();
+        app.Logger.LogError("Could not get an access token. Error: {error}", error);
+
+        response.Append("<dl>");
+        response.Append($"<dt>Error</dt><dd>{error}</dd>");
+        response.Append("</dl>");
+    }
+    response.Append("<p><a href=\"/\">Back to top</a></p>");
+    response.Append("</body>");
+    response.Append("</html>");
+    await context.Response.WriteAsync(response.ToString());
+});
+
+// トークン更新エンドポイント
+app.MapGet("/refresh", async (HttpContext context, [FromServices] IHttpClientFactory httpClientFactory) =>
+{
+    var refreshToken = context.Session.GetString(nameof(AzureAdToken.refresh_token)) ?? string.Empty;
+    var scope = Uri.EscapeDataString("user.read");
+    var parameters = new Dictionary<string, string>
+    {
+        { "client_id", clientId },
+        { "scope", scope },
+        { "refresh_token", refreshToken },
+        { "grant_type", "refresh_token" },
+        { "client_secret", clientSecret }
+    };
+    app.Logger.LogDebug("Parameters: {parameters}", parameters);
+
+    var httpClient = httpClientFactory.CreateClient("AzureAD");
+    var httpResponseMessage = await httpClient.PostAsync(
+        $"{tenantId}/oauth2/v2.0/token",
+        new FormUrlEncodedContent(parameters)
+    );
+
+    var response = new StringBuilder();
+    response.Append("<html lang=\"ja\">");
+    response.Append("<head>");
+    response.Append("<meta charset=\"UTF-8\">");
+    response.Append("</head>");
+    response.Append("<body>");
+    if (httpResponseMessage.IsSuccessStatusCode)
+    {
+        var token = await httpResponseMessage.Content.ReadFromJsonAsync<AzureAdToken>();
+        app.Logger.LogInformation("Access token: {accessToken}", token?.access_token);
+        app.Logger.LogInformation("Refresh token: {refreshToken}", token?.refresh_token);
+        context.Session.SetString(nameof(AzureAdToken.access_token), token?.access_token ?? string.Empty);
+        context.Session.SetString(nameof(AzureAdToken.refresh_token), token?.refresh_token ?? string.Empty);
+
+        response.Append("<dl>");
+        response.Append($"<dt>Access token</dt><dd>{token?.access_token ?? "(not found)"}</dd>");
+        response.Append($"<dt>Refresh token</dt><dd>{token?.refresh_token ?? "(not found)"}</dd>");
+        response.Append("</dl>");
+        response.Append("<p><a href=\"/me\">Show me</a></p>");
+        response.Append("<p><a href=\"/refresh\">Refresh a token</a></p>");
     }
     else
     {
