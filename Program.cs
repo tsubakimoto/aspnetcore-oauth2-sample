@@ -44,9 +44,10 @@ app.MapGet("/", async (HttpContext context) =>
     response.Append("<head>");
     response.Append("<meta charset=\"UTF-8\">");
     response.Append("</head>");
+    response.Append("<body>");
     if (string.IsNullOrWhiteSpace(error) && string.IsNullOrWhiteSpace(description))
     {
-        response.Append("<p><a href=\"/authorize\">Login</a></p>");
+        response.Append("<p><a href=\"/login\">Login</a></p>");
         response.Append($"<p><a href=\"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/logout\">Logout</a></p>");
     }
     else
@@ -56,12 +57,13 @@ app.MapGet("/", async (HttpContext context) =>
         response.Append($"<dt>Error description</dt><dd>{description}</dd>");
         response.Append("</dl>");
     }
+    response.Append("</body>");
     response.Append("</html>");
     await context.Response.WriteAsync(response.ToString());
 });
 
 // 承認コードの要求
-app.MapGet("/authorize", async (HttpContext context) =>
+app.MapGet("/login", async (HttpContext context) =>
 {
     var redirectUri = Uri.EscapeDataString($"{context.Request.Scheme}://{context.Request.Host}/auth-response");
     app.Logger.LogInformation("Redirect Uri: {redirectUri}", redirectUri);
@@ -82,12 +84,13 @@ app.MapGet("/auth-response",
         HttpContext context,
         string code,
         string state,
-        [FromQuery(Name = "session_state")] string sessionState,
-        [FromServices] IHttpClientFactory httpClientFactory) =>
+        [FromQuery(Name = "session_state")] string sessionState) =>
 {
     app.Logger.LogDebug("Code: {code}", code);
     app.Logger.LogDebug("State: {state}", state);
     app.Logger.LogDebug("Session state: {sessionState}", sessionState);
+
+    context.Session.SetString(nameof(code), code);
 
     // var stateInSession = context.Session.GetString(nameof(state));
     // app.Logger.LogInformation("State in session: {stateInSession}", stateInSession);
@@ -97,9 +100,32 @@ app.MapGet("/auth-response",
     //     return;
     // }
 
-    var redirectUri = $"{context.Request.Scheme}://{context.Request.Host}/auth-response";
-    app.Logger.LogInformation("Redirect Uri: {redirectUri}", redirectUri);
+    var response = new StringBuilder();
+    response.Append("<html lang=\"ja\">");
+    response.Append("<head>");
+    response.Append("<meta charset=\"UTF-8\">");
+    response.Append("</head>");
+    response.Append("<body>");
+    response.Append("<dl>");
+    response.Append($"<dt>Code</dt><dd>{code}</dd>");
+    response.Append($"<dt>State</dt><dd>{state}</dd>");
+    response.Append($"<dt>Session state</dt><dd>{sessionState}</dd>");
+    response.Append("</dl>");
+    response.Append("<p><a href=\"/token\">Get a token</a></p>");
+    response.Append("<p><a href=\"/\">Back to top</a></p>");
+    response.Append("</body>");
+    response.Append("</html>");
+    await context.Response.WriteAsync(response.ToString());
+});
 
+// トークン管理エンドポイント
+app.MapGet("/token",
+    async (
+        HttpContext context,
+        [FromServices] IHttpClientFactory httpClientFactory) =>
+{
+    var code = context.Session.GetString("code") ?? string.Empty;
+    var redirectUri = $"{context.Request.Scheme}://{context.Request.Host}/auth-response";
     var scope = Uri.EscapeDataString("user.read");
     var parameters = new Dictionary<string, string>
     {
@@ -123,6 +149,7 @@ app.MapGet("/auth-response",
     response.Append("<head>");
     response.Append("<meta charset=\"UTF-8\">");
     response.Append("</head>");
+    response.Append("<body>");
     if (httpResponseMessage.IsSuccessStatusCode)
     {
         var token = await httpResponseMessage.Content.ReadFromJsonAsync<AzureAdToken>();
@@ -147,6 +174,7 @@ app.MapGet("/auth-response",
         response.Append("</dl>");
     }
     response.Append("<p><a href=\"/\">Back to top</a></p>");
+    response.Append("</body>");
     response.Append("</html>");
     await context.Response.WriteAsync(response.ToString());
 });
@@ -172,6 +200,7 @@ app.MapGet("/me", async (HttpContext context, [FromServices] IHttpClientFactory 
     response.Append("<head>");
     response.Append("<meta charset=\"UTF-8\">");
     response.Append("</head>");
+    response.Append("<body>");
     if (httpResponseMessage.IsSuccessStatusCode)
     {
         var user = JsonSerializer.Deserialize<GraphUser>(await httpResponseMessage.Content.ReadAsStringAsync());
@@ -189,6 +218,7 @@ app.MapGet("/me", async (HttpContext context, [FromServices] IHttpClientFactory 
         response.Append("<p>Who am I?</p>");
     }
     response.Append("<p><a href=\"/\">Back to top</a></p>");
+    response.Append("</body>");
     response.Append("</html>");
     await context.Response.WriteAsync(response.ToString());
 });
