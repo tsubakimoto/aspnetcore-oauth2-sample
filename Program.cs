@@ -210,8 +210,8 @@ app.MapGet("/refresh", async (HttpContext context, [FromServices] IHttpClientFac
     if (httpResponseMessage.IsSuccessStatusCode)
     {
         var token = await httpResponseMessage.Content.ReadFromJsonAsync<AzureAdToken>();
-        app.Logger.LogInformation("Access token: {accessToken}", token?.access_token);
-        app.Logger.LogInformation("Refresh token: {refreshToken}", token?.refresh_token);
+        app.Logger.LogDebug("Access token: {accessToken}", token?.access_token);
+        app.Logger.LogDebug("Refresh token: {refreshToken}", token?.refresh_token);
         context.Session.SetString(nameof(AzureAdToken.access_token), token?.access_token ?? string.Empty);
         context.Session.SetString(nameof(AzureAdToken.refresh_token), token?.refresh_token ?? string.Empty);
 
