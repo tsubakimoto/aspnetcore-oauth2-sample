@@ -1,0 +1,7 @@
+{
+    "recommendations": [
+        "ms-dotnettools.csharp",
+        "ms-azuretools.vscode-azureappservice",
+        "ms-vscode.azure-account"
+    ]
+}
